@@ -1,21 +1,36 @@
+/* ===== Mobile-first base layout =====
+   Below the DESKTOP_BREAKPOINT media query further down, .editor and
+   .resume-preview stack full-width and are toggled by the bottom tab bar
+   (data-mobile-active). Above the breakpoint, they sit side by side exactly
+   as in the original desktop layout, and the toggle has no effect. */
+
 .app {
   display: flex;
-  gap: 1.5rem;
-  padding: 1.5rem;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  padding-bottom: 5rem; /* keeps content clear of the fixed bottom tab bar */
 }
 
 .sidebar {
-  height: fit-content;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  flex-direction: row;
+  justify-content: space-around;
+  gap: 0;
   background-color: #fff;
-  border-radius: 12px;
-  padding: 0.75rem 0.5rem;
+  border-radius: 0;
+  padding: 0.5rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom));
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.1);
 }
 
 .sidebar__btn,
 .sidebar__btn {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -24,7 +39,7 @@
   border: none;
   border-radius: 12px;
   cursor: pointer;
-  font: 600 0.95rem NotoSans; 
+  font: 600 0.95rem NotoSans;
   padding: 0.6rem 0.3rem;
 }
 
@@ -38,16 +53,39 @@
 }
 
 .fa-file-lines,
-.fa-pen-ruler {
+.fa-pen-ruler,
+.sidebar__btn--preview .fa-eye {
   font-size: 1.1rem;
 }
 
 .editor {
-  min-width: 250px;
+  min-width: 0;
+  width: 100%;
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.editor[data-mobile-active="false"] {
+  display: none;
+}
+
+/* Structural container: the resume itself keeps its fixed 800px width and
+   never reflows (see .resume below, unchanged). This wrapper is sized in JS
+   to the resume's scaled dimensions and centers it, so a transform:scale()
+   on .resume shrinks it visually to fit narrow screens instead of forcing
+   horizontal scroll. Toggled by the Preview tab. */
+.resume-preview {
+  width: 100%;
+}
+
+.resume-preview[data-mobile-active="false"] {
+  display: none;
+}
+
+.resume-scaler {
+  margin-inline: auto;
 }
 
 .editor__actions {
@@ -476,4 +514,52 @@ textarea {
 .experience-item__company {
   font-size: 1.05rem;
   font-weight: 600;
+}
+
+/* =====================================================================
+   Desktop layout — reproduces the original side-by-side layout exactly.
+   Below this width, .app stacks and .editor / .resume-preview are toggled
+   by the bottom tab bar instead (see mobile-first rules above).
+   ===================================================================== */
+@media (min-width: 1024px) {
+  .app {
+    flex-direction: row;
+    gap: 1.5rem;
+    padding: 1.5rem;
+  }
+
+  .sidebar {
+    position: static;
+    height: fit-content;
+    flex-direction: column;
+    gap: 0.25rem;
+    border-radius: 12px;
+    padding: 0.75rem 0.5rem;
+    box-shadow: none;
+  }
+
+  .sidebar__btn {
+    flex: initial;
+  }
+
+  .sidebar__btn--preview {
+    display: none;
+  }
+
+  .editor {
+    min-width: 250px;
+    width: auto;
+  }
+
+  .editor[data-mobile-active="false"] {
+    display: flex;
+  }
+
+  .resume-preview {
+    width: auto;
+  }
+
+  .resume-preview[data-mobile-active="false"] {
+    display: block;
+  }
 }

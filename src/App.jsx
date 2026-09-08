@@ -1,17 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { empty, example } from "./resume.js";
 import "./App.css";
 import PersonalSection from "./components/PersonalSection.jsx";
 import EducationSection from "./components/EducationSection.jsx";
 import ExperienceSection from "./components/ExperienceSection.jsx";
 
+const RESUME_WIDTH = 800; // must match the fixed width in .resume (App.css)
+const DESKTOP_BREAKPOINT = "(min-width: 1024px)"; // must match the media query in App.css
+
 export default function App() {
   const [resume, setResume] = useState(example);
   const [resetKey, setResetKey] = useState(0);
   const [editorView, setEditorView] = useState("content");
+  const [mobileView, setMobileView] = useState("editor");
   const [layout, setLayout] = useState("top");
   const [theme, setTheme] = useState({ primary: "#0e374e", secondary: "#eef1f2" });
   const [font, setFont] = useState("sans");
+
+  // Scale-to-fit preview: the resume itself always stays a fixed 800px wide
+  // (unchanged), we just shrink it visually to fit narrow screens so the
+  // whole page is visible without side-scrolling.
+  const [scale, setScale] = useState(1);
+  const [naturalHeight, setNaturalHeight] = useState(0);
+  const previewRef = useRef(null);
+  const resumeRef = useRef(null);
 
   const personalInfo = Object.values(resume.personal).some(v => v !== "");
   const educationItems = resume.education.filter(edu => edu.visible);
@@ -22,6 +34,28 @@ export default function App() {
     root.style.setProperty("--color-primary", theme.primary);
     root.style.setProperty("--color-secondary", theme.secondary);
   }, [theme]);
+
+  useLayoutEffect(() => {
+    function measure() {
+      const previewEl = previewRef.current;
+      const resumeEl = resumeRef.current;
+      if (!previewEl || !resumeEl) return;
+
+      // Desktop keeps the resume at true size, exactly like the original layout.
+      const isDesktop = window.matchMedia(DESKTOP_BREAKPOINT).matches;
+      const containerWidth = previewEl.clientWidth;
+      const nextScale = isDesktop
+        ? 1
+        : Math.min(1, containerWidth / RESUME_WIDTH);
+
+      setScale(nextScale);
+      setNaturalHeight(resumeEl.offsetHeight); // unaffected by our own transform
+    }
+
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [resume, layout, font, mobileView]);
 
   function setPersonal(personal) {
     setResume(resume => ({ ...resume, personal }));
@@ -50,23 +84,40 @@ export default function App() {
       <div className="sidebar">
         <button
           className="sidebar__btn"
-          data-active={editorView === "content"}
-          onClick={() => setEditorView("content")}
+          data-active={editorView === "content" && mobileView !== "preview"}
+          onClick={() => {
+            setEditorView("content");
+            setMobileView("editor");
+          }}
         >
           <i className="fa-regular fa-file-lines"></i>
           <span>Content</span>
         </button>
         <button
           className="sidebar__btn"
-          data-active={editorView === "customize"}
-          onClick={() => setEditorView("customize")}
+          data-active={editorView === "customize" && mobileView !== "preview"}
+          onClick={() => {
+            setEditorView("customize");
+            setMobileView("editor");
+          }}
         >
           <i className="fa-solid fa-pen-ruler"></i>
           <span>Customize</span>
         </button>
+        {/* Mobile-only: the editor and resume preview can't sit side by side on
+            small screens, so this tab swaps the visible panel. Hidden on desktop
+            via CSS, where both panels are already visible at once. */}
+        <button
+          className="sidebar__btn sidebar__btn--preview"
+          data-active={mobileView === "preview"}
+          onClick={() => setMobileView("preview")}
+        >
+          <i className="fa-solid fa-eye"></i>
+          <span>Preview</span>
+        </button>
       </div>
 
-      <div className="editor">
+      <div className="editor" data-mobile-active={mobileView === "editor"}>
         <div className="editor__actions">
           <button className="editor__actions-clear-btn" onClick={clearResume}>
             <i className="fa-solid fa-trash"></i>
@@ -82,8 +133,8 @@ export default function App() {
           <>
             <PersonalSection personal={resume.personal} setPersonal={setPersonal} />
             <EducationSection education={resume.education} setEducation={setEducation} resetKey={resetKey} />
-            <ExperienceSection experience={resume.experience} setExperience={setExperience} resetKey={resetKey} />          
-          </>          
+            <ExperienceSection experience={resume.experience} setExperience={setExperience} resetKey={resetKey} />
+          </>
         )}
 
         {editorView === "customize" && (
@@ -131,7 +182,7 @@ export default function App() {
                   <div className="color__wrapper">
                     <input
                       type="color"
-                      className="color__input"  
+                      className="color__input"
                       value={theme.secondary}
                       onChange={e => setTheme(theme => ({ ...theme, secondary: e.target.value }))}
                     />
@@ -142,7 +193,7 @@ export default function App() {
                   <span className="color__label">Secondary Color</span>
                   <input
                     type="color"
-                    className="color__input"  
+                    className="color__input"
                     value={theme.secondary}
                     onChange={e => setTheme(theme => ({ ...theme, secondary: e.target.value }))}
                   />
@@ -185,68 +236,79 @@ export default function App() {
         )}
       </div>
 
-      <div className={`resume resume--${layout} resume--font-${font}`}>
-        {personalInfo && (
-          <div className="resume__section-personal">
-            <h1 className="resume__name">{resume.personal.name}</h1>
-            <div className="resume__contact">
-              <div className="resume__contact-group">
-                <i className="fa-solid fa-envelope"></i>
-                <span className="resume__email">{resume.personal.email}</span>
-              </div>
-              <div className="resume__contact-group">
-                <i className="fa-solid fa-phone"></i>
-                <span className="resume__phone">{resume.personal.phone}</span>
-              </div>
-              <div className="resume__contact-group">
-                <i className="fa-solid fa-location-dot"></i>
-                <span className="resume__location">{resume.personal.location}</span>
+      <div className="resume-preview" ref={previewRef} data-mobile-active={mobileView === "preview"}>
+        <div
+          className="resume-scaler"
+          style={{ width: RESUME_WIDTH * scale, height: naturalHeight * scale }}
+        >
+          <div
+            ref={resumeRef}
+            className={`resume resume--${layout} resume--font-${font}`}
+            style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}
+          >
+            {personalInfo && (
+            <div className="resume__section-personal">
+              <h1 className="resume__name">{resume.personal.name}</h1>
+              <div className="resume__contact">
+                <div className="resume__contact-group">
+                  <i className="fa-solid fa-envelope"></i>
+                  <span className="resume__email">{resume.personal.email}</span>
+                </div>
+                <div className="resume__contact-group">
+                  <i className="fa-solid fa-phone"></i>
+                  <span className="resume__phone">{resume.personal.phone}</span>
+                </div>
+                <div className="resume__contact-group">
+                  <i className="fa-solid fa-location-dot"></i>
+                  <span className="resume__location">{resume.personal.location}</span>
+                </div>
               </div>
             </div>
+          )}
+
+          <div className="resume__main">
+            {educationItems.length > 0 && (
+              <div className="resume__section-education">
+                <h2 className="resume__education">Education</h2>
+
+                {educationItems.map(edu => (
+                  <div key={edu.id} className="resume__education-info">
+                    <div className="resume__education-info-group">
+                      <p className="resume__education-dates">{edu.startDate} – {edu.endDate}</p>
+                      <p className="resume__education-location">{edu.location}</p>
+                    </div>
+
+                    <div className="resume__education-info-group">
+                      <p className="resume__education-school">{edu.school}</p>
+                      <p className="resume__education-degree">{edu.degree}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {experienceItems.length > 0 && (
+              <div className="resume__section-experience">
+                <h2 className="resume__experience">Professional Experience</h2>
+
+                {experienceItems.map(exp => (
+                  <div key={exp.id} className="resume__experience-info">
+                    <div className="resume__experience-info-group">
+                      <p className="resume__experience-dates">{exp.startDate} – {exp.endDate}</p>
+                      <p className="resume__experience-location">{exp.location}</p>
+                    </div>
+
+                    <div className="resume__experience-info-group">
+                      <p className="resume__experience-company">{exp.company}</p>
+                      <p className="resume__experience-position">{exp.position}</p>
+                      <p className="resume__experience-description">{exp.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-
-        <div className="resume__main">
-          {educationItems.length > 0 && (
-            <div className="resume__section-education">
-              <h2 className="resume__education">Education</h2>
-
-              {educationItems.map(edu => (
-                <div key={edu.id} className="resume__education-info">
-                  <div className="resume__education-info-group">
-                    <p className="resume__education-dates">{edu.startDate} – {edu.endDate}</p>
-                    <p className="resume__education-location">{edu.location}</p>
-                  </div>
-
-                  <div className="resume__education-info-group">
-                    <p className="resume__education-school">{edu.school}</p>
-                    <p className="resume__education-degree">{edu.degree}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {experienceItems.length > 0 && (
-            <div className="resume__section-experience">
-              <h2 className="resume__experience">Professional Experience</h2>
-
-              {experienceItems.map(exp => (
-                <div key={exp.id} className="resume__experience-info">
-                  <div className="resume__experience-info-group">
-                    <p className="resume__experience-dates">{exp.startDate} – {exp.endDate}</p>
-                    <p className="resume__experience-location">{exp.location}</p>
-                  </div>
-
-                  <div className="resume__experience-info-group">
-                    <p className="resume__experience-company">{exp.company}</p>
-                    <p className="resume__experience-position">{exp.position}</p>
-                    <p className="resume__experience-description">{exp.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
